@@ -36,10 +36,18 @@ CATEGORIES = {
     "mobile_app":     "Mobile application (Android, iOS)",
     "api_service":    "API server or microservice",
     "learning":       "Learning materials, tutorials, experiments",
+    "system_tool":    "System utility, shell tool, or runtime manager",
     "other":          "Other / unclassified",
 }
 
-# Sub-categories with more detail
+# Project domains — top-level buckets for the bird's-eye view
+DOMAINS = {
+    "project":   "Active software project with source code",
+    "agent":     "AI agent skill, tool, or plugin",
+    "config":    "Configuration, dotfiles, environment settings",
+    "data":      "Data, models, datasets, or knowledge bases",
+}
+
 SUB_CATEGORIES = {
     "nextjs":      "Next.js application",
     "react":       "React application",
@@ -52,39 +60,45 @@ SUB_CATEGORIES = {
     "go_service":  "Go microservice",
     "node_api":    "Node.js API",
     "python_lib":  "Python library",
+    "shell_tool":  "Shell script or utility",
     "agent_skill": "Hermes agent skill",
     "agent_tool":  "Hermes tool module",
     "agent_plugin":"Hermes plugin",
     "docs_site":   "Documentation site",
+    "config_file": "Configuration file",
+    "runtime":     "Runtime version manager (nvm, pyenv, etc.)",
 }
 
 
 def _build_classification_prompt(nodes: list[Node]) -> str:
     """Build a structured prompt for the LLM to classify all nodes."""
     lines = [
-        "You are a graph intelligence engine. Classify each item into one of the following categories.\n",
+        "You are a graph intelligence engine. Classify each item.",
+        "",
         "CATEGORIES (pick the single best match):",
     ]
     for key, desc in sorted(CATEGORIES.items()):
         lines.append(f"  - {key}: {desc}")
 
-    lines.extend([
-        "\nSUB-CATEGORIES (pick the single best match or leave empty if none fit):",
-    ])
+    lines.append("")
+    lines.append("DOMAINS (top-level bucket - every item gets one):")
+    for key, desc in sorted(DOMAINS.items()):
+        lines.append(f"  - {key}: {desc}")
+
+    lines.append("")
+    lines.append("SUB-CATEGORIES (pick best match or empty):")
     for key, desc in sorted(SUB_CATEGORIES.items()):
         lines.append(f"  - {key}: {desc}")
 
-    lines.extend([
-        "\nFor each item, also suggest a CLUSTER — a higher-level group name (2-5 words).",
-        "Nodes in the same cluster will be grouped together visually.",
-        "Good clusters name real groupings: 'Web Frontends', 'ML Models', 'System Tools', 'Documentation', etc.\n",
-        "\nRespond ONLY with a JSON array. No explanation, no markdown. Example:",
-        """[
-  {"id": "repo:my-app", "category": "web_app", "subcategory": "nextjs", "cluster": "Web Frontends"},
-  {"id": "repo:ml-train", "category": "ml_ai", "subcategory": "pytorch", "cluster": "ML Models"}
-]\n""",
-        "\nITEMS TO CLASSIFY:",
-    ])
+    lines.append("")
+    lines.append("For each item, suggest a CLUSTER - a group name (2-5 words).")
+    lines.append("Nodes in the same cluster group together visually.")
+    lines.append("Repo clusters describe the PROJECT domain. Skill clusters describe the AGENT domain.")
+    lines.append("")
+    lines.append("Respond ONLY with a JSON array. Example:")
+    lines.append('[{"id": "...", "category": "...", "subcategory": "...", "domain": "...", "cluster": "..."}]')
+    lines.append("")
+    lines.append("ITEMS TO CLASSIFY:")
 
     for node in nodes:
         meta = node.metadata
@@ -95,7 +109,6 @@ def _build_classification_prompt(nodes: list[Node]) -> str:
         if meta.get("remote"):
             parts.append(f'remote={meta["remote"]}')
         if meta.get("path"):
-            # Only show the last 2 path parts
             path_parts = meta["path"].split("/")
             parts.append(f'path=.../{".../".join(path_parts[-2:])}')
         lines.append("  " + "  ".join(parts))
@@ -303,12 +316,20 @@ def classify(model: GraphModel) -> GraphModel:
         if node.id in classifications:
             cls = classifications[node.id]
             node.subtype = cls.get("subcategory", cls.get("subtype", ""))
+            domain = cls.get("domain", "")
+            if domain:
+                node.metadata["domain"] = domain
             cluster_name = cls.get("cluster", "Other")
             model.assign_to_cluster(node.id, cluster_name)
         else:
             # Heuristic fallback
             category, subcategory, cluster_name = _heuristic_classify(node)
             node.subtype = subcategory
+            # Assign domain based on type
+            domain_map = {"repo": "project", "skill": "agent", "config": "config",
+                          "profile": "config", "cron": "config",
+                          "plugin": "agent", "tool": "agent", "session": "data"}
+            node.metadata["domain"] = domain_map.get(node.type, "other")
             model.assign_to_cluster(node.id, cluster_name)
 
     # ── Infer inter-repo relationships ──
