@@ -132,6 +132,8 @@ def build_cli() -> argparse.ArgumentParser:
                     help="Skip LLM classification, use heuristics")
     p.add_argument("--json", action="store_true",
                     help="Output JSON model (no SVG)")
+    p.add_argument("--ui", action="store_true",
+                    help="Write JSON for the interactive UI and print the UI path")
     p.add_argument("--max-depth", type=int, default=5,
                     help="Max depth for repo search (default: 5)")
     return p
@@ -174,8 +176,26 @@ def run(args: argparse.Namespace) -> dict:
         print(_print_summary(model, elapsed))
         return {"success": True, "model": model.to_dict()}
 
-    # Determine output path
+    # Always write JSON data for the UI
     name = args.name or "project-graph"
+    json_path = str(Path.home() / "graphs" / f"{name}.json")
+    Path(json_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(json_path, "w") as f:
+        json.dump(model.to_dict(), f, indent=2)
+
+    if args.ui:
+        ui_path = str(Path.home() / "graph-viz-ui" / "out" / "index.html")
+        ui_json_path = Path.home() / "graph-viz-ui" / "out" / "data.json"
+        # Copy JSON into the UI build
+        ui_json_path.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.copy2(json_path, str(ui_json_path))
+        print(f"  \\033[90mJSON data written to {json_path}\\033[0m")
+        print(f"  \\033[1mOpen UI →\\033[0m \\033[94mfile://{ui_path}\\033[0m")
+        print(_print_summary(model, elapsed))
+        return {"success": True, "json_path": json_path, "model": model.to_dict()}
+
+    # Determine output path
     output_path = str(Path.home() / "graphs" / f"{name}.svg")
 
     print(f"  \033[90mRendering ({args.engine or model.suggested_engine})...\033[0m", end=" ", flush=True)
