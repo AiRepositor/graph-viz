@@ -121,8 +121,8 @@ def build_cli() -> argparse.ArgumentParser:
     )
     p.add_argument("--name", "-n", type=str, default=None,
                     help="Name for the graph (used in filename)")
-    p.add_argument("--deep", "-d", action="store_true",
-                    help="Include Hermes agent skills, config, profiles, etc.")
+    p.add_argument("--no-agent", action="store_true",
+                    help="Skip Hermes agent artifacts (skills, config, profiles)")
     p.add_argument("--dirs", type=str, default=None,
                     help="Scan these dirs for repos (default: ~)")
     p.add_argument("--engine", "-e", type=str, default=None,
@@ -147,10 +147,11 @@ def run(args: argparse.Namespace) -> dict:
     # ── Collect repos ──
     print("  \033[90mScanning repos...\033[0m", end=" ", flush=True)
     model = collect_git(root_dirs=scan_dirs, max_depth=args.max_depth)
-    print(f"\033[92m✓\033[0m ({len([n for n in model.nodes.values() if n.type == 'repo'])} found)")
+    total_repos = len([n for n in model.nodes.values() if n.type == 'repo'])
+    print(f"\033[92m✓\033[0m ({total_repos} found)")
 
-    # ── Collect agent artifacts (optional) ──
-    if args.deep:
+    # ── Collect agent artifacts (default: yes, unless --no-agent) ──
+    if not args.no_agent:
         print("  \033[90mScanning agent state...\033[0m", end=" ", flush=True)
         collect_hermes(model=model, aggregated=True)
         total_skills = sum(
