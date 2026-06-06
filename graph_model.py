@@ -96,7 +96,23 @@ class Node:
         return cls(id=_safe_id(f"tool:{name}"), name=name, type="tool")
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        # Compute display-oriented size for the UI
+        if self.type == "skill":
+            count = self.metadata.get("count", 1)
+            d["size"] = 6 + min(count, 30) * 0.5
+            d["count"] = count
+        elif self.type == "repo":
+            langs = self.metadata.get("languages", [])
+            d["size"] = 10 + len(langs) * 2
+            d["count"] = len(langs)
+        elif self.type == "config":
+            d["size"] = 8
+            d["count"] = 1
+        else:
+            d["size"] = 6
+            d["count"] = 1
+        return d
 
     def __str__(self) -> str:
         return f"[{self.type}:{self.name}]"
